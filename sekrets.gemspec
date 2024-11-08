@@ -38,19 +38,20 @@ Gem::Specification::new do |spec|
 
   spec.test_files = nil
 
-  
+
     spec.add_dependency(*["openssl", " ~> 3.2"])
-  
-    spec.add_dependency(*["highline", " ~> 1.7"])
-  
+
     spec.add_dependency(*["map", " ~> 6.6"])
-  
+
     spec.add_dependency(*["fattr", " ~> 2.4"])
-  
+
     spec.add_dependency(*["coerce", " ~> 0.0.8"])
-  
+
     spec.add_dependency(*["main", " ~> 6.3"])
-  
+
+    spec.add_development_dependency(*["rake", " ~> 13.2"])
+
+    spec.add_development_dependency(*["test-unit", " ~> 3.6"])
 
   spec.extensions.push(*[])
 

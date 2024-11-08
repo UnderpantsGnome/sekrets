@@ -124,8 +124,8 @@ class Sekrets
 
 #
   def Sekrets.ask(question)
-    @highline ||= HighLine.new
-    @highline.ask(prompt_for(question))
+    print prompt_for(question)
+    gets.strip
   end
 
 #
@@ -383,7 +383,6 @@ BEGIN {
       def dependencies
         {
           'openssl'  => [ 'openssl'  , ' ~> 3.2'   ] ,
-          'highline' => [ 'highline' , ' ~> 1.7'   ] ,
           'map'      => [ 'map'      , ' ~> 6.6'   ] ,
           'fattr'    => [ 'fattr'    , ' ~> 2.4'   ] ,
           'coerce'   => [ 'coerce'   , ' ~> 0.0.8' ] ,

@@ -1,12 +1,12 @@
 PATH
   remote: .
   specs:
-    sekrets (1.10.0)
-      coerce (>= 0.0.3)
-      fattr (~> 2.2)
-      highline (~> 1.6)
-      main (~> 6.1)
-      map (~> 6.3)
+    sekrets (1.14.0)
+      coerce (~> 0.0.8)
+      fattr (~> 2.4)
+      main (~> 6.3)
+      map (~> 6.6)
+      openssl (~> 3.2)
 
 GEM
   remote: https://rubygems.org/
@@ -15,20 +15,26 @@ GEM
     chronic (0.10.2)
     coerce (0.0.8)
       chronic (>= 0.6.2)
-    fattr (2.3.0)
-    highline (1.7.8)
-    main (6.2.2)
-      arrayfields (~> 4.7, >= 4.7.4)
-      chronic (~> 0.6, >= 0.6.2)
-      fattr (~> 2.2, >= 2.2.0)
-      map (~> 6.1, >= 6.1.0)
+    fattr (2.4.0)
+    main (6.3.0)
+      arrayfields (~> 4.9, >= 4.9.2)
+      chronic (~> 0.10, >= 0.10.2)
+      fattr (~> 2.4, >= 2.4.0)
+      map (~> 6.6, >= 6.6.0)
     map (6.6.0)
+    openssl (3.2.0)
+    power_assert (2.0.4)
+    rake (13.2.1)
+    test-unit (3.6.2)
+      power_assert
 
 PLATFORMS
   ruby
 
 DEPENDENCIES
+  rake (~> 13.2)
   sekrets!
+  test-unit (~> 3.6)
 
 BUNDLED WITH
-   1.14.6
+   2.5.23
