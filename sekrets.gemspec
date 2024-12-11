@@ -5,7 +5,7 @@
 
 Gem::Specification::new do |spec|
   spec.name = "sekrets"
-  spec.version = "1.13.0"
+  spec.version = "1.14.0"
   spec.platform = Gem::Platform::RUBY
   spec.summary = "securely manage encrypted files and settings"
   spec.description = "sekrets is a command line tool and library used to securely manage encrypted files and settings in your rails' applications and git repositories."
@@ -38,17 +38,17 @@ Gem::Specification::new do |spec|
 
   spec.test_files = nil
 
-  
+
     spec.add_dependency(*["highline", " ~> 1.6"])
-  
+
     spec.add_dependency(*["map", " ~> 6.3"])
-  
+
     spec.add_dependency(*["fattr", " ~> 2.2"])
-  
+
     spec.add_dependency(*["coerce", " ~> 0.0.3"])
-  
+
     spec.add_dependency(*["main", " ~> 6.1"])
-  
+
 
   spec.extensions.push(*[])
 
