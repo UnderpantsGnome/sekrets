@@ -112,7 +112,7 @@ class Sekrets
 
     if decrypted
       expanded = ERB.new(decrypted).result(TOPLEVEL_BINDING)
-      object = YAML.load(expanded)
+      object = YAML.load(expanded, aliases: true)
       object.is_a?(Hash) ? Map.for(object) : object
     end
   end
