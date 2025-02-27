@@ -38,21 +38,22 @@ Gem::Specification::new do |spec|
 
   spec.test_files = nil
 
-
-    spec.add_dependency(*["highline", " ~> 1.6"])
-
-    spec.add_dependency(*["map", " ~> 6.3"])
-
-    spec.add_dependency(*["fattr", " ~> 2.2"])
-
-    spec.add_dependency(*["coerce", " ~> 0.0.3"])
-
-    spec.add_dependency(*["main", " ~> 6.1"])
-
+  
+    spec.add_dependency(*["openssl", " ~> 3.2"])
+  
+    spec.add_dependency(*["highline", " ~> 1.7"])
+  
+    spec.add_dependency(*["map", " ~> 6.6"])
+  
+    spec.add_dependency(*["fattr", " ~> 2.4"])
+  
+    spec.add_dependency(*["coerce", " ~> 0.0.8"])
+  
+    spec.add_dependency(*["main", " ~> 6.3"])
+  
 
   spec.extensions.push(*[])
 
-  spec.rubyforge_project = "codeforpeople"
   spec.author = "Ara T. Howard"
   spec.email = "ara.t.howard@gmail.com"
   spec.homepage = "https://github.com/ahoward/sekrets"
