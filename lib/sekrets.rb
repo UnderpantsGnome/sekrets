@@ -124,8 +124,8 @@ class Sekrets
 
 #
   def Sekrets.ask(question)
-    @highline ||= HighLine.new
-    @highline.ask(prompt_for(question))
+    print prompt_for(question)
+    gets.strip
   end
 
 #
