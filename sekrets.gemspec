@@ -38,17 +38,13 @@ Gem::Specification::new do |spec|
 
   spec.test_files = nil
 
-  
-    spec.add_dependency(*["highline", " ~> 1.6"])
-  
-    spec.add_dependency(*["map", " ~> 6.3"])
-  
-    spec.add_dependency(*["fattr", " ~> 2.2"])
-  
-    spec.add_dependency(*["coerce", " ~> 0.0.3"])
-  
-    spec.add_dependency(*["main", " ~> 6.1"])
-  
+  spec.add_dependency(*["map", " ~> 6.3"])
+
+  spec.add_dependency(*["fattr", " ~> 2.2"])
+
+  spec.add_dependency(*["coerce", " ~> 0.0.3"])
+
+  spec.add_dependency(*["main", " ~> 6.1"])
 
   spec.extensions.push(*[])
 
