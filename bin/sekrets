@@ -1,375 +1,185 @@
 #! /usr/bin/env ruby
 
-Main {
-#
-  synopsis <<-__
-    ~> echo 'plaintext' | sekrets write sekrets.enc --key 42
+require 'optparse'
+require 'shellwords'
 
-    ~> sekrets read sekrets.enc --key 42
+bindir = File.expand_path(File.dirname(__FILE__))
+root = File.dirname(bindir)
+libdir = File.join(root, 'lib')
 
-    ~> sekrets edit sekrets.enc
-  __
+require File.join(libdir, 'sekrets.rb')
 
-  description <<-__
-    TL;DR
-      # create an encrypted config file
-      
-        ruby -r yaml -e'puts {:api_key => 1234}.to_yaml' | sekrets write config/settings.yml.enc --key 42
+trap('SIGINT') { STDERR.puts; exit!(42) }
 
-      # display it
+module SekretsCLI
+  module_function
 
-        sekrets read config/settings.yml.enc --key 42
+  HELP = <<~TXT
+    Usage: sekrets <command> [arguments] [options]
 
-      # edit it
+    Commands:
+      write [output] [input]   Encrypt input to a file or stdout
+      read [input] [output]    Decrypt input to a file or stdout
+      edit <path>              Edit an encrypted file with $SEKRETS_EDITOR or $EDITOR
+      recrypt <path>           Re-encrypt a file with a new key
+      help                     Show this help
 
-        sekrets edit config/settings.yml.enc --key 42
+    Use `sekrets <command> --help` for command-specific help.
+  TXT
 
-      # see that it's encrypted
+  def run(argv = ARGV)
+    argv = argv.dup
+    command = argv.shift
 
-        cat config/settings.yml.enc
-
-      # commit it
-
-        git add config/settings.yml.enc
-
-      # put the decryption key in a file
-        
-        echo 42 > sekrets.key
-
-      # ignore this file in git
-
-        echo sekrets.key >> .gitgnore
-
-      # make sure this file gets deployed on your server
-
-        echo " require 'sekrets/capistrano' " >> Capfile
-
-      # commit and deploy
-
-        git add config/settings.yml.enc
-        git commit -am'encrypted settings yo'
-        git pull && git push && cap staging deploy
-
-      # access these settings in your application code
-
-        settings = Sekrets.settings_for('./config/settings.yml.enc')
-        
-      # recrypt an existing encrypted file (aka change the key)
-      
-        sekrets recrypt sekrets.enc [-k current_key] [-k new_key]
-        
-
-    GENERAL
-      sekrets provides commandline tools and a library to manage and access
-      encrypted files in your code base.
-
-      it allows one to check encrypted information into a repository and to manage
-      it alongside the rest of the code base.  it eliminates the need to check in
-      unencrypted information, keys, or other sensitive information.
-
-      sekrets provides both a general mechanism for managing arbitrary encrypted
-      files and a specific mechanism for managing encrypted config files.
-
-
-    KEY LOOKUP
-      for *all* operations, from the command line or otherwise, sekrets uses the
-      following algorithm to search for a decryption key:
-
-      - any key passed directly as a parameter to a library call will be preferred
-
-      - otherwise the code looks for a companion key file.  for example, given the
-        file 'config/sekrets.yml.enc' sekrets will look for a key at
-        
-          config/sekrets.yml.enc.key
-          
-        and 
-        
-          config/sekrets.yml.enc.k
-          
-        if either of these is found to be non-empty the contents of the file will
-        be used as the decryption key for that file.  you should *never* commit
-        these key files and also add them to your .gitignore - or similar.
-
-      - next a project key file is looked for.  the path of this file is
-        
-          ./sekrets.key
-          
-        normally and, in a rails' application
-
-          RAILS_ROOT/sekrets.key
-
-      - if that is not found sekrets looks for the key in the environment under
-        the env var
-
-          SEKRETS_KEY
-
-        the env var used is configurable in the library
-
-      - next the global key file is search for, the path of this file is
-
-          ~/.sekrets.key
-
-      - finally, if no key has yet been specified or found, the user is prompted
-        to input the key.  prompt only occurs if the user us attached to a tty.
-        so, for example, no prompt will hang and application being started in the
-        background such as a rails' application being managed by passenger.
-     
-
-      see Sekrets.key_for for more details
-
-    KEY DISTRIBUTION
-      sekrets does *not* attempt to solve the key distribution problem for you,
-      with one exception:
-      
-      if you are using capistrano to do a 'vanilla' ssh based deploy a simple
-      recipe is provided which will detect a local keyfile and scp it onto the
-      remote server(s) on deploy.
-
-      sekrets assumes that the local keyfile, if it exists, is correct.
-
-      in plain english the capistrano recipe does:
-
-        scp ./sekrets.key deploy@remote.host.com:/rails_root/current/sekrets.key
-
-      it goes without saying that the local keyfile should *never* be checked in
-      and also should be in .gitignore
-
-      distribution of this key among developers is outside the scope of the
-      library.  likely unencrypted email is the best mechanism for distribution
-      ;-/
-  __
-
-#
-  def run
-    help!
+    case command
+    when nil, 'help', '-h', '--help'
+      puts HELP
+      0
+    when 'write'
+      run_write(argv)
+    when 'read'
+      run_read(argv)
+    when 'edit'
+      run_edit(argv)
+    when 'recrypt'
+      run_recrypt(argv)
+    else
+      warn "unknown command: #{command}"
+      warn
+      warn HELP
+      1
+    end
+  rescue OptionParser::ParseError => error
+    warn error.message
+    1
   end
 
-#
-  mode(:write){
-    synopsis <<-__
-      write encrypted data to file
-    __
-
-    description <<-__
-      write mode writes it's input (default STDIN) to output (deafult STDOUT)
-      after encrypting it with key
-    __
-
-    examples <<-__
-      ~> echo 'the pazzw0rd' | sekrets write -k 42 > sekrets.enc
-
-      ~> sekrets write output.enc input.txt -k 42
-    __
-
-    argument('output', 'o'){
-      argument :required
-      default STDOUT
-    }
-
-    argument('input', 'i'){
-      argument :required
-      default STDIN
-    }
-
-    option('key', 'k'){
-      argument :required
-    }
-
-    def run
-      Sekrets.openw(params[:output].value) do |output|
-        key = key_for(output)
-
-        Sekrets.openr(params[:input].value) do |input|
-          decrypted = input.read
-          encrypted = Sekrets.encrypt(key, decrypted)
-          output.write(encrypted)
-        end
-      end
-    end
-  }
-
-#
-  mode(:read){
-    synopsis <<-__
-      reads encrypted data from a file
-    __
-
-    description <<-__
-      read mode reads it's input (default STDIN) and writes it's output
-      (default STDOUT) after decrypting it with key
-    __
-
-    examples <<-__
-      ~> cat output.enc | sekrets read -k 42
-
-      ~> sekrets read output.enc output.dec -k 42
-    __
-
-    argument('input', 'i'){
-      argument :required
-      default STDIN
-    }
-
-    argument('output', 'o'){
-      argument :required
-      default STDOUT
-    }
-
-    option('key', 'k'){
-      argument :required
-    }
-
-    def run
-      Sekrets.openr(params[:input].value) do |input|
-        key = key_for(input)
-
-        Sekrets.openw(params[:output].value) do |output|
-          encrypted = input.read
-          decrypted = Sekrets.decrypt(key, encrypted)
-          output.write(decrypted)
-        end
-      end
-    end
-  }
-
-
-#
-  mode(:recrypt){
-    synopsis <<-__
-      re-encrypts a file with a new key
-    __
-
-    description <<-__
-      provide the old and new key by using the --key option twice
-
-      the first key is the current decryption key
-
-      the second key is the new one
-
-      if you do not provide the keys as options you will be prompted for them
-    __
-
-    examples <<-__
-      ~> sekrets recrypt sekrets.enc -k current_key -k new_key
-    __
-
-    argument(:path)
-
-    option('key', 'k'){
-      argument :required
-    }
-
-    def run
-      path = params[:path].value
-
-      cur_key, new_key, *ignored = params[:key].values.first(2)
-
-      unless cur_key
-        cur_key = Sekrets.ask("#{ path } [cur key]")
-      end
-
-      unless new_key
-        new_key = Sekrets.ask("#{ path } [new key]")
-      end
-
-      decrypted = Sekrets.read(path, :key => cur_key)
-      encrypted = Sekrets.write(path, decrypted, :key => new_key)
-      decrypted = Sekrets.read(path, :key => new_key)
-      puts path
-    end
-  }
-
-#
-  mode(:edit){
-    synopsis <<-__
-      spawn an external editor to edit an encrypted file
-    __
-
-    description <<-__
-      edit mode looks first to the unix environment variable SEKRETS_EDTIOR
-      or, if that is not found, the normal EDITOR variable to determine which
-      editor to launch.  it assumes that your editor can be launched from the
-      commandline with a file as single argument. vim is the default editor.
-
-      after the editor program exits succesfully the temporary file is
-      encrypted and saved.
-    __
-
-    examples <<-__
-      ~> sekrets edit my.passwords.txt -k
-
-      ~> EDITOR=mate sekrets edit my.passwords.txt -k
-    __
-
-    argument(:path)
-
-    option('key', 'k'){
-      argument :required
-    }
-
-    def run
-      path = params[:path].value
-      path = File.expand_path(path)
-
-      key = key_for(path)
-
-      decrypted =
-        if test(?s, path)
-          Sekrets.read(path, :key => key)
-        else
-          ''
-        end
-
-      basename = File.basename(path)
-      encrypted = nil
-
-      tmpfile = Sekrets.tmpfile_for(basename, decrypted)
-      command = "#{ Sekrets.editor } #{ tmpfile }"
-
-      status = Sekrets.system(command)
-
-      if status == 0
-        content = IO.binread(tmpfile)
-        Sekrets.write(path, content, :key => key)
-      else
-        abort "command `#{ command }` failed and no new `#{ path }` was saved!"
-      end
-    end
-  }
-
-#
-  def key_for(arg)
+  def run_write(argv)
     options = {}
-
-    if params[:key].given?
-      options[:key] = params[:key].value
+    parser = OptionParser.new do |opts|
+      opts.banner = 'Usage: sekrets write [output] [input] [options]'
+      opts.separator ''
+      opts.separator 'Encrypt input and write the ciphertext to a file or stdout.'
+      opts.on('-k', '--key KEY', 'Encryption key') { |value| options[:key] = value }
+      opts.on('-h', '--help', 'Show help') { puts opts; exit 0 }
     end
 
-    key = Sekrets.key_for!(arg, options)
-  end
-}
+    parser.parse!(argv)
+    output = argv.shift || '-'
+    input = argv.shift || '-'
+    return usage_error(parser, argv) unless argv.empty?
 
+    Sekrets.openw(output) do |output_io|
+      key = Sekrets.key_for!(output, options)
 
-BEGIN {
-  require 'pathname'
+      Sekrets.openr(input) do |input_io|
+        output_io.write(Sekrets.encrypt(key, input_io.read))
+      end
+    end
 
-  bindir = Pathname.new(__FILE__).dirname.to_s
-  root = File.dirname(bindir)
-  libdir = File.join(root, 'lib')
-
-  require "#{ libdir }/sekrets.rb"
-
-  begin
-    require 'pry'
-  rescue Object
-    nil
+    0
   end
 
-  trap('SIGINT'){ STDERR.puts; exit!(42) }
+  def run_read(argv)
+    options = {}
+    parser = OptionParser.new do |opts|
+      opts.banner = 'Usage: sekrets read [input] [output] [options]'
+      opts.separator ''
+      opts.separator 'Decrypt input and write the plaintext to a file or stdout.'
+      opts.on('-k', '--key KEY', 'Decryption key') { |value| options[:key] = value }
+      opts.on('-h', '--help', 'Show help') { puts opts; exit 0 }
+    end
 
-  if((sekrets_argv = ENV['SEKRETS_ARGV']))
-    ENV.delete('SEKRETS_ARGV')
-    command = [$0, sekrets_argv, *ARGV].flatten.compact.join(' ')
-    exec(command)
+    parser.parse!(argv)
+    input = argv.shift || '-'
+    output = argv.shift || '-'
+    return usage_error(parser, argv) unless argv.empty?
+
+    Sekrets.openr(input) do |input_io|
+      key = Sekrets.key_for!(input, options)
+
+      Sekrets.openw(output) do |output_io|
+        output_io.write(Sekrets.decrypt(key, input_io.read))
+      end
+    end
+
+    0
   end
-}
+
+  def run_recrypt(argv)
+    options = { keys: [] }
+    parser = OptionParser.new do |opts|
+      opts.banner = 'Usage: sekrets recrypt <path> [-k OLD_KEY] [-k NEW_KEY]'
+      opts.separator ''
+      opts.separator 'Provide --key twice to avoid interactive prompts.'
+      opts.on('-k', '--key KEY', 'Current key, then replacement key') { |value| options[:keys] << value }
+      opts.on('-h', '--help', 'Show help') { puts opts; exit 0 }
+    end
+
+    parser.parse!(argv)
+    path = argv.shift
+    return missing_argument(parser, 'path') unless path
+    return usage_error(parser, argv) unless argv.empty?
+
+    current_key, new_key = options[:keys].first(2)
+    current_key ||= Sekrets.ask("#{path} [cur key]")
+    new_key ||= Sekrets.ask("#{path} [new key]")
+
+    decrypted = Sekrets.read(path, :key => current_key)
+    Sekrets.write(path, decrypted, :key => new_key)
+    puts path
+    0
+  end
+
+  def run_edit(argv)
+    options = {}
+    parser = OptionParser.new do |opts|
+      opts.banner = 'Usage: sekrets edit <path> [options]'
+      opts.separator ''
+      opts.separator 'Edit an encrypted file using $SEKRETS_EDITOR, $EDITOR, or vim.'
+      opts.on('-k', '--key KEY', 'Decryption key') { |value| options[:key] = value }
+      opts.on('-h', '--help', 'Show help') { puts opts; exit 0 }
+    end
+
+    parser.parse!(argv)
+    path = argv.shift
+    return missing_argument(parser, 'path') unless path
+    return usage_error(parser, argv) unless argv.empty?
+
+    path = File.expand_path(path)
+    key = Sekrets.key_for!(path, options)
+    decrypted = test(?s, path) ? Sekrets.read(path, :key => key) : ''
+
+    tmpfile = Sekrets.tmpfile_for(File.basename(path), decrypted)
+    command = editor_command(tmpfile)
+    status = Sekrets.system(command)
+
+    if status.zero?
+      Sekrets.write(path, IO.binread(tmpfile), :key => key)
+      return 0
+    end
+
+    warn "command `#{command.shelljoin}` failed and no new `#{path}` was saved!"
+    1
+  end
+
+  def editor_command(tmpfile)
+    command = Shellwords.split(Sekrets.editor.to_s)
+    command = ['vim'] if command.empty?
+    command + [tmpfile]
+  end
+
+  def usage_error(parser, argv)
+    warn "unexpected arguments: #{argv.join(' ')}"
+    warn parser
+    1
+  end
+
+  def missing_argument(parser, name)
+    warn "missing argument: #{name}"
+    warn parser
+    1
+  end
+end
+
+exit(SekretsCLI.run)

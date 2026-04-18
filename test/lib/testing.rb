@@ -1,75 +1,67 @@
-# -*- encoding : utf-8 -*-
-# simple testing support
-#
-  require 'test/unit'
+require 'minitest/autorun'
 
-  def Testing(*args, &block)
-    Class.new(Test::Unit::TestCase) do
-      eval("This=self")
+module TestingSupport
+  class << self
+    attr_accessor :suite_count
+  end
 
-      def self.slug_for(*args)
-        string = args.flatten.compact.join('-')
-        words = string.to_s.scan(%r/\w+/)
-        words.map!{|word| word.gsub %r/[^0-9a-zA-Z_-]/, ''}
-        words.delete_if{|word| word.nil? or word.strip.empty?}
-        words.join('-').downcase
-      end
+  self.suite_count = 0
 
-      def This.testing_subclass_count
-        @testing_subclass_count ||= 1
-      ensure
-        @testing_subclass_count += 1
-      end
+  def self.slug_for(*args)
+    string = args.flatten.compact.join('-')
+    words = string.to_s.scan(/\w+/)
+    words.map! { |word| word.gsub(/[^0-9a-zA-Z_-]/, '') }
+    words.reject! { |word| word.nil? || word.strip.empty? }
+    words.join('-').downcase
+  end
+end
 
-      slug = slug_for(*args).gsub(%r/-/,'_')
-      name = ['TESTING', '%03d' % This.testing_subclass_count, slug].delete_if{|part| part.empty?}.join('_')
-      name = name.upcase!
-      const_set(:Name, name)
-      def self.name() const_get(:Name) end
+def Testing(*args, &block)
+  TestingSupport.suite_count += 1
 
-      def self.testno()
-        '%05d' % (@testno ||= 0)
-      ensure
+  slug = TestingSupport.slug_for(*args).tr('-', '_')
+  name = ['TESTING', format('%03d', TestingSupport.suite_count), slug].reject(&:empty?).join('_').upcase
+
+  klass = Class.new(Minitest::Test) do
+    class << self
+      def testno
+        @testno ||= 0
+        current = format('%05d', @testno)
         @testno += 1
+        current
       end
 
-      def self.testing(*args, &block)
-        method = ["test", testno, slug_for(*args)].delete_if{|part| part.empty?}.join('_')
-        define_method("test_#{ testno }_#{ slug_for(*args) }", &block)
+      def testing(*test_args, &test_block)
+        slug = TestingSupport.slug_for(*test_args).tr('-', '_')
+        define_method("test_#{testno}_#{slug}", &test_block)
       end
+    end
 
-      alias_method '__assert__', 'assert'
+    alias_method :__minitest_assert__, :assert
 
-      def assert(*args, &block)
-        if block
-          label = "assert(#{ args.join ' ' })"
-          result = nil
-          assert_nothing_raised{ result = block.call }
-          __assert__(result, label)
-          result
-        else
-          result = args.shift
-          label = "assert(#{ args.join ' ' })"
-          __assert__(result, label)
-          result
-        end
+    def assert(*args, &block)
+      if block
+        result = block.call
+        __minitest_assert__(result, args.join(' '))
+        result
+      else
+        result = args.shift
+        __minitest_assert__(result, args.join(' '))
+        result
       end
+    end
 
-      def subclass_of exception
-        class << exception
-          def ==(other) super or self > other end
-        end
-        exception
-      end
+    alias_method :__minitest_assert_raises__, :assert_raises
 
-      alias_method '__assert_raises__', 'assert_raises'
-
-      def assert_raises(*args, &block)
-        args.push(subclass_of(Exception)) if args.empty?
-        __assert_raises__(*args, &block)
-      end
-
-      module_eval &block
-      self
+    def assert_raises(*args, &block)
+      args = [Exception] if args.empty?
+      __minitest_assert_raises__(*args, &block)
     end
   end
+
+  Object.send(:remove_const, name) if Object.const_defined?(name, false)
+  Object.const_set(name, klass)
+
+  klass.class_eval(&block)
+  klass
+end

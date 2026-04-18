@@ -1,109 +1,131 @@
-# NAME
+# sekrets
 
-sekrets.rb
+`sekrets` is a CLI and library for encrypting files that live alongside the rest of your app or repo.
 
-## SYNOPSIS
+It keeps ciphertext in version control and looks up decryption keys from local key files, environment variables, or an interactive prompt.
 
-sekrets is a command line tool and library used to securely manage encrypted files and settings in your rails' applications and git repositories.
+## Install
 
-## INSTALL
+```sh
+gem install sekrets
+```
 
-    gem install sekrets
+In a project:
 
-## DESCRIPTION
+```ruby
+# Gemfile
+gem 'sekrets'
+```
 
-sekrets provides commandline tools and a library to manage and access encrypted files in your code base.
+## CLI
 
-It allows one to check encrypted information into a repository and to manage it alongside the rest of the code base. It eliminates the need to check in unencrypted information, keys, or other sensitive information.
+```text
+Usage: sekrets <command> [arguments] [options]
 
-sekrets provides both a general mechanism for managing arbitrary encrypted files and a specific mechanism for managing encrypted config files.
+Commands:
+  write [output] [input]   Encrypt input to a file or stdout
+  read [input] [output]    Decrypt input to a file or stdout
+  edit <path>              Edit an encrypted file with $SEKRETS_EDITOR or $EDITOR
+  recrypt <path>           Re-encrypt a file with a new key
+  help                     Show this help
+```
 
-## USAGE
+Per-command help is available with `sekrets <command> --help`.
 
-create an encrypted config file
+## Quick Start
 
-    ruby -r yaml -e'puts({:api_key => 1234}.to_yaml)' | sekrets write config/settings.yml.enc --key 42
+Create an encrypted config file:
 
-display it
+```sh
+ruby -ryaml -e 'puts({ api_key: 1234 }.to_yaml)' | sekrets write config/settings.yml.enc -k 42
+```
 
-    sekrets read config/settings.yml.enc --key 42
+Read it back:
 
- edit it
+```sh
+sekrets read config/settings.yml.enc -k 42
+```
 
-    sekrets edit config/settings.yml.enc --key 42
+Edit it in place:
 
-see that it's encrypted
+```sh
+sekrets edit config/settings.yml.enc -k 42
+```
 
-    cat config/settings.yml.enc
+Confirm the file on disk is encrypted:
 
-commit it
+```sh
+cat config/settings.yml.enc
+```
 
-    git add config/settings.yml.enc
+Store the key in a project key file so you do not need `-k` every time:
 
-put the decryption key in a file
+```sh
+printf '42\n' > .sekrets.key
+printf '.sekrets.key\n' >> .gitignore
+```
 
-    echo 42 > .sekrets.key
+Then commands can omit the key:
 
-ignore this file in git
+```sh
+sekrets read config/settings.yml.enc
+sekrets edit config/settings.yml.enc
+```
 
-    echo .sekrets.key >> .gitignore
+## Library
 
-you now no longer need to provide the `--key` argument to commands
+Read encrypted settings in Ruby:
 
-    sekrets read config/settings.yml.enc
-    sekrets edit config/settings.yml.enc
+```ruby
+settings = Sekrets.settings_for('./config/settings.yml.enc')
+settings.api_key
+```
 
-make sure this file gets deployed on your server
+`Sekrets.settings_for` returns a small hash-like wrapper that supports both key access and method-style access for nested hashes.
 
-    echo " require 'sekrets/capistrano' " >> Capfile
+## Key Lookup
 
-commit and deploy
+`Sekrets.key_for` uses this precedence order:
 
-    git add config/settings.yml.enc
-    git commit -am'encrypted settings yo'
-    git pull && git push && cap staging deploy
+1. An explicit `:key` argument.
+2. A companion key file next to the encrypted file, such as `config/.settings.yml.enc.key` or `config/.settings.yml.enc.k`.
+3. A project key file at `./.sekrets.key` or `Rails.root/.sekrets.key`.
+4. The environment variable `SEKRETS_KEY`.
+5. A global key file at `~/.sekrets.key`.
+6. An interactive prompt when attached to a tty.
 
-access these settings in your application code
+Never commit key files.
 
-    settings = Sekrets.settings_for('./config/settings.yml.enc')
+## Rails
 
-## RAILS
+The gem still includes Rails tasks for generating a project key, editor stub, and encrypted config:
 
-    gem 'sekrets' # Gemfile
+```sh
+bundle exec rake sekrets:generate:key
+bundle exec rake sekrets:generate:editor
+bundle exec rake sekrets:generate:config
+```
 
-    bundle install
+## Capistrano
 
-    rake sekrets:generate:key
-    rake sekrets:generate:editor
-    rake sekrets:generate:config
+Capistrano integration is still included. Add this to your `Capfile`:
 
+```ruby
+require 'sekrets/capistrano'
+```
 
-## KEY LOOKUP
+That task uploads `./.sekrets.key` during deploy so the app can read encrypted files on the target hosts.
 
-for *all* operations, from the command line or otherwise, sekrets uses the following algorithm to search for a decryption key:
+## Development
 
-- any key passed directly as a parameter to a library call will be preferred
-- otherwise the code looks for a companion key file.  for example, given the file `config/sekrets.yml.enc` sekrets will look for a key at `config/.sekrets.yml.enc.key`
-- If either of these is found to be non-empty the contents of the file will be used as the decryption key for that file. You should **never** commit these key files and also add them to your `.gitignore` - or similar.
-- Next a project key file is looked for. The path of this file is `./.sekrets.key` normally and, in a rails' application `RAILS_ROOT/.sekrets.key`
-- If that is not found sekrets looks for the key in the environment under the env var `SEKRETS_KEY` (the env var used is configurable in the library)
-- Next the global key file is search for, the path of this file is `~/.sekrets.key`
-- Finally, if no key has yet been specified or found, the user is prompted to input the key. Prompt only occurs if the user us attached to a tty. So, for example, no prompt will hang an application being started in the background (such as a rails' application being managed by passenger).
+Run tests with:
 
-see `Sekrets.key_for` for explicit details
+```sh
+bundle exec rake test
+```
 
-## KEY DISTRIBUTION
+Useful rake tasks:
 
-sekrets does *not* attempt to solve the key distribution problem for you, with one exception:
-
-If you are using capistrano to do a *vanilla* ssh based deploy, a simple recipe is provided which will detect a local keyfile and scp it onto the remote server(s) on deploy.
-
-sekrets assumes that the local keyfile, if it exists, is correct.
-
-In plain english the capistrano recipe does:
-
-    scp ./sekrets.key deploy@remote.host.com:/rails_root/current/sekrets.key
-
-It goes without saying that the local keyfile should *never* be checked in and also should be in `.gitignore`.
-
-Distribution of this key among developers is outside the scope of the library. Encrypted email is likely the best mechanism for distribution, but you've still got to solve this problem for yourself ;-/
+```sh
+bundle exec rake -T
+```
