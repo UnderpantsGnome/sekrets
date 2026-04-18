@@ -6,26 +6,21 @@ Gem::Specification.new do |spec|
   spec.description = "sekrets is a command line tool and library used to securely manage encrypted files and settings in your rails' applications and git repositories."
   spec.license = 'BSD-2-Clause'
 
-  spec.files =
-    ['Gemfile',
-     'Gemfile.lock',
-     'LICENSE',
-     'README.md',
-     'Rakefile',
-     'bin',
-     'bin/sekrets',
-     'lib',
-     'lib/sekrets',
-     'lib/sekrets.rb',
-     'lib/sekrets/capistrano.rb',
-     'lib/sekrets/tasks',
-     'lib/sekrets/tasks/capistrano2.rb',
-     'lib/sekrets/tasks/sekrets.rake',
-     'sekrets.gemspec',
-     'test',
-     'test/lib',
-     'test/lib/testing.rb',
-     'test/sekrets_test.rb']
+  spec.files = %w[
+    LICENSE
+    README.md
+    Rakefile
+    bin
+    bin/sekrets
+    lib
+    lib/sekrets
+    lib/sekrets.rb
+    lib/sekrets/capistrano.rb
+    lib/sekrets/tasks
+    lib/sekrets/tasks/capistrano2.rb
+    lib/sekrets/tasks/sekrets.rake
+    sekrets.gemspec
+  ]
 
   spec.executables = ['sekrets']
 
