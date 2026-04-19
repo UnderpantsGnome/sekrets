@@ -1,3 +1,18 @@
+require 'fileutils'
+require 'open3'
+require 'pty'
+require 'rbconfig'
+require 'tmpdir'
+
+TEST_DIR = __dir__
+ROOT_DIR = File.expand_path('..', TEST_DIR)
+LIB_DIR = File.join(ROOT_DIR, 'lib')
+
+Dir.chdir(TEST_DIR)
+
+require_relative 'lib/testing'
+require_relative '../lib/sekrets'
+
 Testing Sekrets do
   testing 'basic Sekrets.encrypt/Sekrets.decrypt functionality' do
     plaintext = '42'
@@ -43,11 +58,11 @@ Testing Sekrets do
     end
 
     with_paths 'plaintext' => 'plaintext' do
-      command = %[ #{ruby} -r #{$libdir}/sekrets.rb -e'puts Sekrets.key_for("plaintext")' ]
+      command = [ruby, '-r', File.join(LIB_DIR, 'sekrets.rb'), '-e', 'puts Sekrets.key_for("plaintext")']
 
       key = nil
 
-      PTY.spawn(command) do |r, w, _pid|
+      PTY.spawn(*command) do |r, w, _pid|
         w.puts('foobar')
         w.close
         key = begin
@@ -59,7 +74,7 @@ Testing Sekrets do
 
       assert { key =~ /foobar/ }
 
-      key = `#{command} </dev/null`
+      key, _status = Open3.capture2(*command, stdin_data: '')
       assert { key !~ /foobar/ }
     end
   end
@@ -123,7 +138,7 @@ Testing Sekrets do
       tmp = dirname
       assert { Dir.pwd == dirname }
       IO.binwrite('marker.txt', 'ok')
-      assert { test('s', 'marker.txt') }
+      assert { File.size?('marker.txt') }
     end
 
     assert { !File.exist?(tmp) }
@@ -148,7 +163,7 @@ Testing Sekrets do
       assert { status.success? }
       assert { stdout.empty? }
       assert { stderr.empty? }
-      assert { test('s', encrypted) }
+      assert { File.size?(encrypted) }
 
       stdout, stderr, status = run_cli('read', encrypted, decrypted, '-k', '42')
       assert { status.success? }
@@ -167,6 +182,21 @@ Testing Sekrets do
       assert { status.success? }
       assert { stdout == 'from stdout' }
       assert { stderr.empty? }
+    end
+  end
+
+  testing 'sekrets read cli accepts read-only encrypted files' do
+    tmpdir do
+      encrypted = File.join(Dir.pwd, 'secret.enc')
+      Sekrets.write(encrypted, 'read only content', '42')
+      File.chmod(0o444, encrypted)
+
+      stdout, stderr, status = run_cli('read', encrypted, '-k', '42')
+      assert { status.success? }
+      assert { stdout == 'read only content' }
+      assert { stderr.empty? }
+    ensure
+      File.chmod(0o644, encrypted) if File.exist?(encrypted)
     end
   end
 
@@ -202,6 +232,22 @@ Testing Sekrets do
     end
   end
 
+  testing 'sekrets read cli preserves existing output when decrypt fails' do
+    tmpdir do
+      encrypted = File.join(Dir.pwd, 'secret.enc')
+      output = File.join(Dir.pwd, 'output.txt')
+
+      Sekrets.write(encrypted, 'super secret', 'right-key')
+      IO.binwrite(output, 'keep me')
+
+      stdout, stderr, status = run_cli('read', encrypted, output, '-k', 'wrong-key')
+      assert { !status.success? }
+      assert { stdout.empty? }
+      assert { stderr.include?('bad decrypt') }
+      assert { IO.binread(output) == 'keep me' }
+    end
+  end
+
   testing 'sekrets cli without args prints help' do
     stdout, stderr, status = run_cli
     assert { status.success? }
@@ -218,7 +264,7 @@ Testing Sekrets do
         path = File.join(Dir.pwd, path.to_s)
         FileUtils.mkdir_p(File.dirname(path))
 
-        open(path, 'wb') { |fd| fd.write(contents) }
+        File.binwrite(path, contents)
       end
 
       block.call
@@ -230,13 +276,29 @@ Testing Sekrets do
   end
 
   def with_environment(options = {}, &block)
+    previous_values = {}
+    previous_presence = {}
+
+    options.each_key do |key|
+      key = key.to_s
+      previous_presence[key] = ENV.key?(key)
+      previous_values[key] = ENV[key]
+    end
+
     options.each do |key, val|
       ENV[key.to_s] = val.to_s
     end
+
     block.call
   ensure
     options.each do |key, _val|
-      ENV.delete(key.to_s)
+      key = key.to_s
+
+      if previous_presence[key]
+        ENV[key] = previous_values[key]
+      else
+        ENV.delete(key)
+      end
     end
   end
 
@@ -245,14 +307,12 @@ Testing Sekrets do
   end
 
   def run_cli(*args, stdin_data: nil)
-    env = {
-      'RUBYOPT' => nil
-    }
+    env = { 'RUBYOPT' => nil }
 
     Open3.capture3(
       env,
       ruby,
-      File.join($rootdir, 'bin', 'sekrets'),
+      File.join(ROOT_DIR, 'bin', 'sekrets'),
       *args,
       stdin_data: stdin_data,
       chdir: Dir.pwd
@@ -260,31 +320,6 @@ Testing Sekrets do
   end
 
   def ruby
-    @ruby ||= begin
-      c = RbConfig::CONFIG
-      bindir = c['bindir'] || c['BINDIR']
-      ruby_install_name = c['ruby_install_name'] || c['RUBY_INSTALL_NAME'] || 'ruby'
-      ruby_ext = c['EXEEXT'] || ''
-      File.join(bindir, ruby_install_name + ruby_ext)
-    end
+    RbConfig.ruby
   end
 end
-
-BEGIN {
-  $testdir = File.dirname(File.expand_path(__FILE__))
-  $testlibdir = File.join($testdir, 'lib')
-  $rootdir = File.dirname($testdir)
-  $libdir = File.join($rootdir, 'lib')
-  $LOAD_PATH.push($libdir)
-  $LOAD_PATH.push($testlibdir)
-
-  Dir.chdir($testdir)
-
-  require 'tmpdir'
-  require 'fileutils'
-  require 'pty'
-  require 'open3'
-
-  require 'testing'
-  require 'sekrets'
-}

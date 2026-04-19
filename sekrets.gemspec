@@ -1,6 +1,8 @@
+require_relative 'lib/sekrets/version'
+
 Gem::Specification.new do |spec|
   spec.name = 'sekrets'
-  spec.version = '1.14.0'
+  spec.version = Sekrets::VERSION
   spec.platform = Gem::Platform::RUBY
   spec.summary = 'securely manage encrypted files and settings'
   spec.description = "sekrets is a command line tool and library used to securely manage encrypted files and settings in your rails' applications and git repositories."
@@ -14,8 +16,17 @@ Gem::Specification.new do |spec|
     bin/sekrets
     lib
     lib/sekrets
+    lib/sekrets/blowfish.rb
+    lib/sekrets/binstub.rb
     lib/sekrets.rb
     lib/sekrets/capistrano.rb
+    lib/sekrets/console.rb
+    lib/sekrets/engine.rb
+    lib/sekrets/files.rb
+    lib/sekrets/keys.rb
+    lib/sekrets/settings.rb
+    lib/sekrets/tempfiles.rb
+    lib/sekrets/version.rb
     lib/sekrets/tasks
     lib/sekrets/tasks/capistrano2.rb
     lib/sekrets/tasks/sekrets.rake
